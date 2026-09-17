@@ -9,167 +9,42 @@
 import GObject from 'gi://GObject';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
-import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as QuickSettings from 'resource:///org/gnome/shell/ui/quickSettings.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-const SERVICE = 'gnome-typer.service';
-const CONFIG_REL = ['gnome-typer', 'config.json'];
+import {Daemon, writeConfig} from './daemon.js';
 
-/* ------------------------------------------------------------------ utils */
+const ICON = 'input-keyboard-symbolic';
 
-function configPath() {
-    return GLib.build_filenamev([GLib.get_user_config_dir(), ...CONFIG_REL]);
-}
+// Dragging the volume slider emits a settings change per frame. Coalescing
+// them keeps us from rewriting the config file dozens of times a second.
+const SYNC_DELAY_MS = 200;
 
-/** Locate the daemon: user install first, then system, then a dev checkout. */
-function daemonPath() {
-    const candidates = [
-        GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'gnome-typer']),
-        '/usr/local/bin/gnome-typer',
-        '/usr/bin/gnome-typer',
-        GLib.build_filenamev([GLib.get_home_dir(), 'Projects', 'gnome-typer', 'daemon', 'gnome-typer']),
-    ];
-    return candidates.find(p => GLib.file_test(p, GLib.FileTest.IS_EXECUTABLE)) ?? null;
-}
-
-/** Run a command, resolving with stdout. Never throws into the shell. */
-function runAsync(argv) {
-    return new Promise(resolve => {
-        let proc;
-        try {
-            proc = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
-        } catch (e) {
-            resolve({ok: false, stdout: '', stderr: String(e)});
-            return;
-        }
-        proc.communicate_utf8_async(null, null, (src, res) => {
-            try {
-                const [, stdout, stderr] = src.communicate_utf8_finish(res);
-                resolve({ok: src.get_successful(), stdout: stdout ?? '', stderr: stderr ?? ''});
-            } catch (e) {
-                resolve({ok: false, stdout: '', stderr: String(e)});
-            }
-        });
-    });
-}
-
-/* --------------------------------------------------------------- daemon io */
-
-class Daemon {
-    constructor() {
-        this._path = daemonPath();
-    }
-
-    get available() {
-        return this._path !== null;
-    }
-
-    async isRunning() {
-        const {stdout} = await runAsync(['systemctl', '--user', 'is-active', SERVICE]);
-        return stdout.trim() === 'active';
-    }
-
-    /** Prefer systemd so the daemon survives shell restarts; fall back to spawning. */
-    async start() {
-        const unit = GLib.build_filenamev([GLib.get_user_config_dir(), 'systemd', 'user', SERVICE]);
-        if (GLib.file_test(unit, GLib.FileTest.EXISTS))
-            return runAsync(['systemctl', '--user', 'start', SERVICE]);
-        if (!this._path)
-            return {ok: false, stderr: 'daemon binary not found'};
-        try {
-            Gio.Subprocess.new([this._path], Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
-            return {ok: true};
-        } catch (e) {
-            return {ok: false, stderr: String(e)};
-        }
-    }
-
-    async stop() {
-        const unit = GLib.build_filenamev([GLib.get_user_config_dir(), 'systemd', 'user', SERVICE]);
-        if (GLib.file_test(unit, GLib.FileTest.EXISTS))
-            return runAsync(['systemctl', '--user', 'stop', SERVICE]);
-        return runAsync(['pkill', '-f', 'gnome_typer.cli|gnome-typer$']);
-    }
-
-    async listPacks() {
-        if (!this._path)
-            return [];
-        const {ok, stdout} = await runAsync([this._path, '--list-packs', '--json']);
-        if (!ok)
-            return [];
-        try {
-            return JSON.parse(stdout);
-        } catch {
-            return [];
-        }
-    }
-}
-
-/* ------------------------------------------------------- settings -> config */
-
-function parseJson(text, fallback) {
-    try {
-        const value = JSON.parse(text);
-        return value ?? fallback;
-    } catch {
-        return fallback;
-    }
-}
-
-/** Write the daemon's JSON config from GSettings. */
-function syncConfig(settings) {
-    const cfg = {
-        enabled: settings.get_boolean('enabled'),
-        pack: settings.get_string('pack'),
-        volume: settings.get_double('volume'),
-        key_up_sounds: settings.get_boolean('key-up-sounds'),
-        repeat_sounds: settings.get_boolean('repeat-sounds'),
-        stereo: settings.get_double('stereo'),
-        velocity: {
-            enabled: settings.get_boolean('velocity-enabled'),
-            amount: settings.get_double('velocity-amount'),
-            fast_ms: settings.get_int('velocity-fast-ms'),
-            slow_ms: settings.get_int('velocity-slow-ms'),
-            humanize: settings.get_double('humanize'),
-        },
-        key_sounds: parseJson(settings.get_string('key-sounds'), {}),
-        combos: parseJson(settings.get_string('combos'), []),
-    };
-
-    const path = configPath();
-    const dir = Gio.File.new_for_path(path).get_parent();
-    try {
-        if (!dir.query_exists(null))
-            dir.make_directory_with_parents(null);
-        const text = new TextEncoder().encode(`${JSON.stringify(cfg, null, 2)}\n`);
-        // Replace atomically so the daemon never reads a half-written file.
-        Gio.File.new_for_path(path).replace_contents(
-            text, null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
-    } catch (e) {
-        logError(e, 'gnome-typer: could not write config');
-    }
-}
+// Purely cosmetic keys: changing them need not touch the daemon's config.
+const SHELL_ONLY_KEYS = ['show-indicator'];
 
 /* -------------------------------------------------------------------- UI */
 
 const TyperToggle = GObject.registerClass(
 class TyperToggle extends QuickSettings.QuickMenuToggle {
-    _init(settings, daemon) {
+    _init(extension, daemon) {
         super._init({
             title: _('Typer'),
-            iconName: 'input-keyboard-symbolic',
+            iconName: ICON,
             toggleMode: true,
         });
 
+        const settings = extension.getSettings();
+        this._extension = extension;
         this._settings = settings;
         this._daemon = daemon;
         this._packItems = new Map();
+        this._destroyed = false;
 
-        this.menu.setHeader('input-keyboard-symbolic', _('GNOME Typer'), _('Keyboard sounds'));
+        this.menu.setHeader(ICON, _('GNOME Typer'), _('Keyboard sounds'));
 
         this._packSection = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._packSection);
@@ -188,28 +63,38 @@ class TyperToggle extends QuickSettings.QuickMenuToggle {
         this.menu.addMenuItem(this._velocityItem);
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        const prefs = this.menu.addAction(_('Settings…'), () => {
+        this.menu.addAction(_('Settings…'), () => {
             Main.overview.hide();
             Main.panel.closeQuickSettings();
-            try {
-                Gio.DBus.session.call(
-                    'org.gnome.Shell.Extensions', '/org/gnome/Shell/Extensions',
-                    'org.gnome.Shell.Extensions', 'OpenExtensionPrefs',
-                    new GLib.Variant('(ssa{sv})', ['gnome-typer@dixonsolutions.github.io', '', {}]),
-                    null, Gio.DBusCallFlags.NONE, -1, null, null);
-            } catch (e) {
-                logError(e);
-            }
+            this._extension.openPreferences();
         });
-        prefs.visible = true;
 
         settings.bind('enabled', this, 'checked', Gio.SettingsBindFlags.DEFAULT);
-        this._packChangedId = settings.connect('changed::pack', () => this._markActivePack());
+
+        this._settingsIds = [
+            settings.connect('changed::pack', () => this._markActivePack()),
+            // The switches are also reachable from the preferences window.
+            settings.connect('changed::key-up-sounds', () =>
+                this._keyUpItem.setToggleState(settings.get_boolean('key-up-sounds'))),
+            settings.connect('changed::velocity-enabled', () =>
+                this._velocityItem.setToggleState(settings.get_boolean('velocity-enabled'))),
+        ];
+
+        // Packs can be installed from the preferences window while the shell
+        // is running, so re-read the list whenever the menu is opened.
+        this._openId = this.menu.connect('open-state-changed', (_m, open) => {
+            if (open)
+                this.refreshPacks();
+        });
+
         this.refreshPacks();
     }
 
     async refreshPacks() {
         const packs = await this._daemon.listPacks();
+        if (this._destroyed)
+            return;                     // menu went away while we were shelling out
+
         this._packSection.removeAll();
         this._packItems.clear();
 
@@ -232,13 +117,20 @@ class TyperToggle extends QuickSettings.QuickMenuToggle {
         const active = this._settings.get_string('pack');
         for (const [id, item] of this._packItems)
             item.setOrnament(id === active ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
+
+        const item = this._packItems.get(active);
+        this.subtitle = item ? item.label.text : null;
     }
 
     destroy() {
-        if (this._packChangedId) {
-            this._settings.disconnect(this._packChangedId);
-            this._packChangedId = null;
+        this._destroyed = true;
+        if (this._openId) {
+            this.menu.disconnect(this._openId);
+            this._openId = null;
         }
+        for (const id of this._settingsIds ?? [])
+            this._settings.disconnect(id);
+        this._settingsIds = [];
         super.destroy();
     }
 });
@@ -250,16 +142,16 @@ class VolumeSlider extends QuickSettings.QuickSlider {
         this._settings = settings;
         this._changing = false;
 
-        this._sliderId = this.slider.connect('notify::value', () => {
-            if (this._changing)
-                return;
-            this._settings.set_double('volume', this.slider.value);
+        this.slider.connect('notify::value', () => {
+            if (!this._changing)
+                this._settings.set_double('volume', this.slider.value);
         });
         this._settingsId = settings.connect('changed::volume', () => this._sync());
         this._sync();
     }
 
     _sync() {
+        // Guard against the settings write we just made bouncing back.
         this._changing = true;
         this.slider.value = this._settings.get_double('volume');
         this._changing = false;
@@ -276,19 +168,22 @@ class VolumeSlider extends QuickSettings.QuickSlider {
 
 const TyperIndicator = GObject.registerClass(
 class TyperIndicator extends QuickSettings.SystemIndicator {
-    _init(settings, daemon) {
+    _init(extension, daemon) {
         super._init();
+        const settings = extension.getSettings();
         this._settings = settings;
 
         this._icon = this._addIndicator();
-        this._icon.iconName = 'input-keyboard-symbolic';
+        this._icon.iconName = ICON;
 
-        this.toggle = new TyperToggle(settings, daemon);
+        this.toggle = new TyperToggle(extension, daemon);
         this.slider = new VolumeSlider(settings);
         this.quickSettingsItems.push(this.toggle, this.slider);
 
-        this._visId = settings.connect('changed::show-indicator', () => this._syncVisible());
-        this._enabledId = settings.connect('changed::enabled', () => this._syncVisible());
+        this._ids = [
+            settings.connect('changed::show-indicator', () => this._syncVisible()),
+            settings.connect('changed::enabled', () => this._syncVisible()),
+        ];
         this._syncVisible();
     }
 
@@ -298,11 +193,9 @@ class TyperIndicator extends QuickSettings.SystemIndicator {
     }
 
     destroy() {
-        for (const id of [this._visId, this._enabledId]) {
-            if (id)
-                this._settings.disconnect(id);
-        }
-        this._visId = this._enabledId = null;
+        for (const id of this._ids ?? [])
+            this._settings.disconnect(id);
+        this._ids = [];
         this.quickSettingsItems.forEach(item => item.destroy());
         this.quickSettingsItems.length = 0;
         super.destroy();
@@ -314,16 +207,17 @@ class TyperIndicator extends QuickSettings.SystemIndicator {
 export default class GnomeTyperExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
-        this._daemon = new Daemon();
+        this._daemon = new Daemon(this.path);
+        this._syncSource = 0;
 
-        syncConfig(this._settings);
+        writeConfig(this._settings);
 
-        this._indicator = new TyperIndicator(this._settings, this._daemon);
+        this._indicator = new TyperIndicator(this, this._daemon);
         Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicator);
 
-        // Any setting change is mirrored to the daemon's config file.
         this._changedId = this._settings.connect('changed', (_s, key) => {
-            syncConfig(this._settings);
+            if (!SHELL_ONLY_KEYS.includes(key))
+                this._queueSync();
             if (key === 'enabled')
                 this._applyEnabled();
         });
@@ -336,6 +230,18 @@ export default class GnomeTyperExtension extends Extension {
         }
     }
 
+    /** Write the config file once the settings stop moving. */
+    _queueSync() {
+        if (this._syncSource)
+            GLib.Source.remove(this._syncSource);
+        this._syncSource = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SYNC_DELAY_MS, () => {
+            this._syncSource = 0;
+            if (this._settings)
+                writeConfig(this._settings);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
     _applyEnabled() {
         if (this._settings.get_boolean('enabled'))
             this._daemon.start();
@@ -344,6 +250,12 @@ export default class GnomeTyperExtension extends Extension {
     }
 
     disable() {
+        if (this._syncSource) {
+            GLib.Source.remove(this._syncSource);
+            this._syncSource = 0;
+            // A pending change would otherwise be lost on lock/unlock.
+            writeConfig(this._settings);
+        }
         if (this._changedId) {
             this._settings.disconnect(this._changedId);
             this._changedId = null;

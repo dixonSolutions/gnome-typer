@@ -5,51 +5,15 @@ import Gtk from 'gi://Gtk';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
-import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensionPreferences.js';
+import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-function daemonPath() {
-    const candidates = [
-        GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'gnome-typer']),
-        '/usr/local/bin/gnome-typer',
-        '/usr/bin/gnome-typer',
-        GLib.build_filenamev([GLib.get_home_dir(), 'Projects', 'gnome-typer', 'daemon', 'gnome-typer']),
-    ];
-    return candidates.find(p => GLib.file_test(p, GLib.FileTest.IS_EXECUTABLE)) ?? null;
-}
-
-function runAsync(argv) {
-    return new Promise(resolve => {
-        let proc;
-        try {
-            proc = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
-        } catch (e) {
-            resolve({ok: false, stdout: '', stderr: String(e)});
-            return;
-        }
-        proc.communicate_utf8_async(null, null, (src, res) => {
-            try {
-                const [, stdout, stderr] = src.communicate_utf8_finish(res);
-                resolve({ok: src.get_successful(), stdout: stdout ?? '', stderr: stderr ?? ''});
-            } catch (e) {
-                resolve({ok: false, stdout: '', stderr: String(e)});
-            }
-        });
-    });
-}
-
-function parseJson(text, fallback) {
-    try {
-        return JSON.parse(text) ?? fallback;
-    } catch {
-        return fallback;
-    }
-}
+import {findDaemon, runAsync, parseJson} from './daemon.js';
 
 export default class GnomeTyperPrefs extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         const settings = this.getSettings();
         this._settings = settings;
-        this._daemon = daemonPath();
+        this._daemon = findDaemon(this.path);
 
         window.set_default_size(720, 780);
         window.add(this._generalPage(settings));
@@ -445,6 +409,11 @@ export default class GnomeTyperPrefs extends ExtensionPreferences {
         window.set_visible_page(page);
     }
 
+    /** Downloaded packs live here; anything else is a builtin and is not removable. */
+    _userPackDir() {
+        return GLib.build_filenamev([GLib.get_user_data_dir(), 'gnome-typer', 'packs']);
+    }
+
     async _loadInstalled(settings) {
         this._installedRows?.forEach(row => this._installedGroup.remove(row));
         this._installedRows = [];
@@ -459,14 +428,50 @@ export default class GnomeTyperPrefs extends ExtensionPreferences {
         }
         const {ok, stdout} = await runAsync([this._daemon, '--list-packs', '--json']);
         const list = ok ? parseJson(stdout, []) : [];
+        const active = settings.get_string('pack');
+        const userDir = this._userPackDir();
+
         for (const pack of list) {
             const row = new Adw.ActionRow({
                 title: pack.name ?? pack.id,
                 subtitle: pack.description ?? '',
             });
-            const use = new Gtk.Button({label: _('Use'), valign: Gtk.Align.CENTER});
-            use.connect('clicked', () => settings.set_string('pack', pack.id));
-            row.add_suffix(use);
+
+            if (pack.id === active) {
+                row.add_suffix(new Gtk.Image({icon_name: 'object-select-symbolic'}));
+            } else {
+                const use = new Gtk.Button({label: _('Use'), valign: Gtk.Align.CENTER});
+                use.connect('clicked', () => {
+                    settings.set_string('pack', pack.id);
+                    this._loadInstalled(settings);
+                });
+                row.add_suffix(use);
+            }
+
+            if (typeof pack.path === 'string' && pack.path.startsWith(userDir)) {
+                const remove = new Gtk.Button({
+                    icon_name: 'user-trash-symbolic',
+                    valign: Gtk.Align.CENTER,
+                    css_classes: ['flat'],
+                    tooltip_text: _('Remove this pack'),
+                });
+                remove.connect('clicked', async () => {
+                    remove.sensitive = false;
+                    const res = await runAsync([this._daemon, '--remove-pack', pack.id]);
+                    if (!res.ok) {
+                        remove.sensitive = true;
+                        return;
+                    }
+                    // Removing the pack in use would leave the daemon with
+                    // nothing to play, so fall back to a builtin.
+                    if (pack.id === settings.get_string('pack'))
+                        settings.set_string('pack', 'crunch');
+                    this._loadPacks(settings);
+                    this._loadInstalled(settings);
+                });
+                row.add_suffix(remove);
+            }
+
             this._installedGroup.add(row);
             this._installedRows.push(row);
         }
@@ -483,14 +488,19 @@ export default class GnomeTyperPrefs extends ExtensionPreferences {
             model.append(pack.name ?? pack.id);
             this._packIds.push(pack.id);
         }
+        // Assigning a model resets `selected` to 0, which would otherwise fire
+        // the handler and write the first pack into GSettings. Disconnect
+        // across the whole rebuild and reconnect once the real one is chosen.
+        if (this._packRowId) {
+            this._packRow.disconnect(this._packRowId);
+            this._packRowId = null;
+        }
         this._packRow.model = model;
 
         const active = this._packIds.indexOf(settings.get_string('pack'));
         if (active >= 0)
             this._packRow.selected = active;
 
-        if (this._packRowId)
-            this._packRow.disconnect(this._packRowId);
         this._packRowId = this._packRow.connect('notify::selected', () => {
             const id = this._packIds[this._packRow.selected];
             if (id)
