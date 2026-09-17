@@ -51,7 +51,7 @@ So loudness is derived from typing dynamics instead:
 - **Position** — each key is panned by where it sits on the board, so `A` is
   left, `Backspace` is right.
 
-All of it is tunable, and `Dynamics → Range → 0` turns it off.
+All of it is tunable. Turn off **Typing feel → Vary loudness while typing** for an even volume.
 
 ## Install
 
@@ -136,6 +136,19 @@ curl -fsSL https://github.com/dixonSolutions/gnome-typer/releases/latest/downloa
 
 ## Built-in packs
 
+### Tune library
+
+Three tunes are available offline, with seven more in the curated library.
+Each is a new, monophonic CC0 encoding built with
+[music21](https://www.music21.org/), has a downloadable MusicXML score, and
+is synthesized locally. No recording, soundfont, account, or background
+network request is involved. **One note per key** is the default; **Play while
+typing** follows the tune's tempo until you pause. More tunes can be installed
+from Sound library.
+
+To regenerate the checked-in library after editing its source, install
+music21 and run `./.venv/bin/python tools/build-tunes.py`.
+
 | Pack | Character |
 | --- | --- |
 | `crunch` | gritty, crunchy tactile switches with a granular bite |
@@ -149,6 +162,23 @@ Regenerate or tweak them:
 
 ```bash
 python3 tools/synth_packs.py crunch
+```
+
+## Choose and try a sound
+
+Open **GNOME Typer → Settings → Sound** to choose a sound pack, set the volume,
+and try it in the typing field. The **Preview** button plays a short example
+without switching packs or needing access to keyboard devices. Preview plays
+only when you request it; browsing the library is silent.
+
+**Sound library** filters installed packs by name or description. Use its play
+buttons to compare packs, then choose **Use**. **Typing feel** controls rhythm
+and stereo width; detailed timing and custom catalogue URLs stay collapsed
+until needed. Key release sounds follow the loudness of their original press,
+and holding a repeating key does not make subsequent typing artificially loud.
+
+```bash
+gnome-typer --preview --pack thock --volume 0.4
 ```
 
 ## More packs
@@ -215,6 +245,7 @@ dependency beyond the standard library is numpy.
 
 ```bash
 python3 -m unittest discover -s tests -v
+tools/test-config-sync.sh         # native GSettings sync; isolated from live config
 ```
 
 `tools/test-extension-enable.sh` goes further: it starts a real headless

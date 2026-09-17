@@ -129,6 +129,13 @@ class Pack:
         self._load()
 
     def _load(self):
+        if self.manifest.get("kind") == "tune":
+            from .tunes import events
+            self.tune_events = events(self.manifest)
+            self.sounds["down"] = [sample for sample, _ in self.tune_events if sample is not None]
+            self.key_map = {}
+            self.errors = []
+            return
         errors = []
         for category, files in (self.manifest.get("sounds") or {}).items():
             if isinstance(files, str):

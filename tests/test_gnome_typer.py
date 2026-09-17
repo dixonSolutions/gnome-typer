@@ -4,6 +4,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from unittest import mock
 import wave
 import zipfile
 
@@ -11,7 +12,7 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "daemon"))
 
-from gnome_typer import config, engine, keycodes, packs, store   # noqa: E402
+from gnome_typer import cli, config, engine, keycodes, packs, store, tunes   # noqa: E402
 
 RATE = 48000
 
@@ -62,6 +63,38 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(config.load(path)["volume"], 0.25)
             self.assertFalse(path.with_suffix(".json.tmp").exists())
 
+    def test_non_object_json_falls_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "config.json"
+            for value in ([], None, "oops", 42):
+                path.write_text(json.dumps(value))
+                self.assertEqual(config.load(path), config.DEFAULTS)
+
+    def test_watcher_can_stop_and_join(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            watcher = config.Watcher(lambda _: None, pathlib.Path(tmp) / "config.json", interval=0.01)
+            watcher.start()
+            watcher.stop()
+            watcher.join(timeout=1)
+            self.assertFalse(watcher.is_alive())
+
+
+class TestKeyboardDiscovery(unittest.TestCase):
+    def test_excludes_hotkey_only_devices(self):
+        bits = sum(1 << keycodes.resolve(key) for key in ("KEY_A", "KEY_Z", "KEY_SPACE"))
+        fixture = (
+            'N: Name="Power Button"\nH: Handlers=kbd event0\nB: KEY=8000000000000\n\n'
+            f'N: Name="Keyboard"\nH: Handlers=sysrq kbd event1\nB: KEY={bits:x}\n'
+        )
+        with mock.patch("builtins.open", mock.mock_open(read_data=fixture)), \
+                mock.patch.object(engine.os, "access", return_value=True):
+            self.assertEqual(engine.keyboard_devices(), [("/dev/input/event1", "Keyboard")])
+
+    def test_explicit_device_selection_still_allows_special_hardware(self):
+        with mock.patch.object(engine.os, "access", return_value=True):
+            self.assertEqual(engine.keyboard_devices(include=["/dev/input/event0"]),
+                             [("/dev/input/event0", "explicit")])
+
 
 class TestVelocity(unittest.TestCase):
     def _velocity(self, **over):
@@ -109,6 +142,15 @@ class FakePack:
         return category in self.sounds
 
 
+class TunePack(FakePack):
+    id = "tune-test"
+
+    def __init__(self):
+        super().__init__(("down",))
+        self.tune_events = [(np.ones((4, 2), np.float32), .2), (None, .1),
+                            (np.full((4, 2), 2, np.float32), .2)]
+
+
 class TestEngine(unittest.TestCase):
     def _engine(self, **over):
         cfg = config.merge(config.DEFAULTS, over)
@@ -120,6 +162,52 @@ class TestEngine(unittest.TestCase):
         for code in (30, 29, 42, 57, 1, 125):     # a, ctrl, shift, space, esc, meta
             eng.on_key(code, engine.VALUE_DOWN, 0.0)
         self.assertEqual(len(mixer.calls), 6)
+
+    def test_tune_advances_once_per_typing_key_and_skips_rests(self):
+        cfg = config.merge(config.DEFAULTS, {"pack": "tune-test"})
+        mixer = FakeMixer()
+        eng = engine.Engine(mixer, TunePack(), cfg)
+        for value in (engine.VALUE_DOWN, engine.VALUE_REPEAT, engine.VALUE_UP):
+            eng.on_key(keycodes.resolve("KEY_A"), value, 1)
+        eng.on_key(keycodes.resolve("KEY_LEFTSHIFT"), engine.VALUE_DOWN, 2)
+        eng.on_key(keycodes.resolve("KEY_S"), engine.VALUE_DOWN, 3)
+        self.assertEqual(len(mixer.calls), 2)
+        self.assertTrue(np.all(mixer.calls[0]["samples"] == 1))
+        self.assertTrue(np.all(mixer.calls[1]["samples"] == 2))
+
+    def test_tune_flow_stops_after_typing_goes_idle(self):
+        cfg = config.merge(config.DEFAULTS, {"pack": "tune-test", "tune_mode": "flow"})
+        mixer = FakeMixer()
+        eng = engine.Engine(mixer, TunePack(), cfg)
+        eng._last_typing = 10
+        eng._flow_step(10)
+        self.assertEqual(len(mixer.calls), 1)
+        eng._flow_step(12)
+        self.assertEqual(len(mixer.calls), 1)
+
+
+class TestTunes(unittest.TestCase):
+    # The existing input-behaviour tests below share the same small fake
+    # engine fixture; keeping it here makes the tune catalogue checks local.
+    def _engine(self, **over):
+        cfg = config.merge(config.DEFAULTS, over)
+        mixer = FakeMixer()
+        return engine.Engine(mixer, FakePack(), cfg), mixer
+
+    def test_bundled_catalogue_is_valid_and_loadable(self):
+        entries = tunes.catalogue()
+        self.assertGreaterEqual(len(entries), 10)
+        for entry in entries:
+            self.assertEqual(entry["license"], "CC0-1.0")
+            self.assertTrue(entry["url"].startswith("https://"))
+        root = pathlib.Path(__file__).resolve().parent.parent / "catalogue" / "tunes"
+        for path in root.glob("*.json"):
+            manifest = tunes.validate(json.loads(path.read_text()))
+            self.assertTrue(tunes.events(manifest))
+
+    def test_invalid_tune_is_rejected_before_synthesis(self):
+        with self.assertRaises(ValueError):
+            tunes.validate({"id": "bad", "kind": "tune", "tempo": 100, "melody": []})
 
     def test_key_up_can_be_disabled(self):
         eng, mixer = self._engine(key_up_sounds=False)
@@ -202,6 +290,67 @@ class TestEngine(unittest.TestCase):
         eng, mixer = self._engine(volume=0.5, velocity={"enabled": False})
         eng.on_key(30, engine.VALUE_DOWN, 0.0)
         self.assertAlmostEqual(mixer.calls[-1]["gain"], 0.5, places=6)
+
+    def test_release_follows_its_own_press_loudness(self):
+        eng, mixer = self._engine(velocity={"humanize": 0.0})
+        eng.on_key(30, engine.VALUE_DOWN, 0.0)
+        first_gain = mixer.calls[-1]["gain"]
+        eng.on_key(31, engine.VALUE_DOWN, 0.04)
+        eng.on_key(30, engine.VALUE_UP, 0.08)
+        self.assertAlmostEqual(mixer.calls[-1]["gain"], first_gain * eng.velocity.release_ratio)
+
+    def test_orphan_release_is_silent(self):
+        eng, mixer = self._engine()
+        eng.on_key(30, engine.VALUE_UP, 0.0)
+        self.assertEqual(mixer.calls, [])
+
+    def test_autorepeat_does_not_inflate_typing_speed(self):
+        cfg = {"repeat_sounds": True, "velocity": {"humanize": 0.0}}
+        repeated, repeat_mix = self._engine(**cfg)
+        quiet, quiet_mix = self._engine(**cfg)
+        for eng in (repeated, quiet):
+            eng.on_key(30, engine.VALUE_DOWN, 0.0)
+        for n in range(1, 20):
+            repeated.on_key(30, engine.VALUE_REPEAT, n * 0.05)
+        repeated.on_key(31, engine.VALUE_DOWN, 1.0)
+        quiet.on_key(31, engine.VALUE_DOWN, 1.0)
+        self.assertAlmostEqual(repeat_mix.calls[-1]["gain"], quiet_mix.calls[-1]["gain"])
+
+    def test_invalid_event_value_is_silent(self):
+        eng, mixer = self._engine()
+        eng.on_key(30, 9, 0.0)
+        self.assertEqual(mixer.calls, [])
+        self.assertEqual(eng.held, set())
+
+
+class TestPreview(unittest.TestCase):
+    def test_preview_needs_no_input_device_and_stops_audio(self):
+        mixer = mock.MagicMock()
+        mixer.rate = RATE
+        with mock.patch.object(cli, "Mixer", return_value=mixer), \
+                mock.patch.object(cli.config, "load", return_value=config.merge(config.DEFAULTS, {})), \
+                mock.patch.object(cli.packs, "load", return_value=FakePack()), \
+                mock.patch.object(cli.engine, "keyboard_devices") as devices, \
+                mock.patch.object(cli.time, "sleep"):
+            mixer.start.return_value = mixer
+            self.assertEqual(cli.main(["--preview", "--volume", "0.4"]), 0)
+        devices.assert_not_called()
+        mixer.stop.assert_called_once()
+        self.assertEqual(mixer.play.call_count, 12)
+        for call in mixer.play.call_args_list:
+            self.assertLessEqual(call.kwargs["gain"], 0.64)
+
+    def test_preview_reports_missing_pack_without_starting_audio(self):
+        with mock.patch.object(cli.packs, "load", side_effect=KeyError("missing")), \
+                mock.patch.object(cli, "Mixer") as mixer, \
+                mock.patch.object(cli, "log"):
+            self.assertEqual(cli.main(["--preview", "--pack", "missing"]), 1)
+        mixer.assert_not_called()
+
+    def test_invalid_volume_is_rejected(self):
+        with mock.patch("sys.stderr"), self.assertRaises(SystemExit) as error:
+            cli.main(["--preview", "--volume", "1.1"])
+        self.assertEqual(error.exception.code, 2)
 
 
 class TestStoreSecurity(unittest.TestCase):

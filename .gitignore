@@ -5,3 +5,5 @@ extension/schemas/gschemas.compiled
 .cache/
 build/
 dist/
+
+.venv/

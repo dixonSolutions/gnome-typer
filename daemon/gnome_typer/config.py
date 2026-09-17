@@ -17,6 +17,7 @@ CONFIG_PATH = CONFIG_DIR / "config.json"
 DEFAULTS = {
     "enabled": True,
     "pack": "crunch",
+    "tune_mode": "keystroke",
     "volume": 0.9,
     "key_up_sounds": True,
     "repeat_sounds": False,          # sound on held-key autorepeat
@@ -51,7 +52,8 @@ def load(path=None):
     if not path.exists():
         return copy.deepcopy(DEFAULTS)
     try:
-        return merge(DEFAULTS, json.loads(path.read_text()))
+        data = json.loads(path.read_text())
+        return merge(DEFAULTS, data) if isinstance(data, dict) else copy.deepcopy(DEFAULTS)
     except (OSError, json.JSONDecodeError):
         return copy.deepcopy(DEFAULTS)
 
@@ -79,7 +81,7 @@ class Watcher(threading.Thread):
         self.path = pathlib.Path(path or CONFIG_PATH)
         self.on_change = on_change
         self.interval = interval
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
         self._stamp = self._mtime()
 
     def _mtime(self):
@@ -89,7 +91,7 @@ class Watcher(threading.Thread):
             return 0
 
     def run(self):
-        while not self._stop.wait(self.interval):
+        while not self._stop_event.wait(self.interval):
             stamp = self._mtime()
             if stamp != self._stamp:
                 self._stamp = stamp
@@ -100,4 +102,4 @@ class Watcher(threading.Thread):
                     pass
 
     def stop(self):
-        self._stop.set()
+        self._stop_event.set()

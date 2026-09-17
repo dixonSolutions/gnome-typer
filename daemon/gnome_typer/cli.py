@@ -6,7 +6,7 @@ import sys
 import threading
 import time
 
-from . import config, engine, packs, store
+from . import config, engine, packs, store, tunes
 from .audio import Mixer
 
 VERSION = "0.1.0"
@@ -102,6 +102,50 @@ def cmd_remove(args):
     return 0
 
 
+def cmd_preview(args):
+    """Play a short, finite example without opening any input device."""
+    cfg = config.load(args.config)
+    cfg["enabled"] = True
+    if args.pack:
+        cfg["pack"] = args.pack
+    if args.volume is not None:
+        cfg["volume"] = args.volume
+    if args.no_keyup:
+        cfg["key_up_sounds"] = False
+    mixer = None
+    try:
+        pack = packs.load(cfg["pack"])
+        mixer = Mixer(gain=1.0, latency=args.latency, device=args.device).start()
+        cfg['tune_mode'] = 'keystroke'
+        eng = engine.Engine(mixer, pack, cfg)
+        if hasattr(pack, 'tune_events'):
+            elapsed = 0
+            for sample, duration in pack.tune_events:
+                if elapsed >= 8:
+                    break
+                if sample is not None:
+                    mixer.play(sample, gain=cfg['volume'], pan=0)
+                time.sleep(duration)
+                elapsed += duration
+            return 0
+        for key in ("a", "s", "d", "KEY_SPACE", "f", "KEY_ENTER"):
+            code = engine.keycodes.resolve(key)
+            eng.on_key(code, engine.VALUE_DOWN, time.monotonic())
+            time.sleep(0.045)
+            eng.on_key(code, engine.VALUE_UP, time.monotonic())
+            time.sleep(0.105)
+        # Let the longest tail finish (bounded for third-party packs).
+        tail = max(len(sample) / mixer.rate for variants in pack.sounds.values() for sample in variants)
+        time.sleep(min(tail + 0.1, 2.0))
+    except (KeyError, RuntimeError, OSError, ValueError) as exc:
+        log(f"preview failed: {exc}")
+        return 1
+    finally:
+        if mixer is not None:
+            mixer.stop()
+    return 0
+
+
 def run(args):
     cfg = config.load(args.config)
     if args.pack:
@@ -113,7 +157,7 @@ def run(args):
 
     try:
         pack = packs.load(cfg["pack"])
-    except KeyError as exc:
+    except (KeyError, RuntimeError, OSError, ValueError) as exc:
         log(str(exc))
         return 1
     if getattr(pack, "errors", None):
@@ -136,8 +180,8 @@ def run(args):
 
     def reload(new_cfg):
         try:
-            new_pack = pack if new_cfg["pack"] == pack.id else packs.load(new_cfg["pack"])
-        except KeyError as exc:
+            new_pack = eng.pack if new_cfg["pack"] == eng.pack.id else packs.load(new_cfg["pack"])
+        except (KeyError, RuntimeError, OSError, ValueError) as exc:
             log(f"reload: {exc}")
             return
         eng.reconfigure(new_cfg, new_pack)
@@ -160,6 +204,7 @@ def run(args):
             pass
     finally:
         watcher.stop()
+        eng.stop()
         mixer.stop()
         log("stopped")
     return 0
@@ -175,6 +220,9 @@ def main(argv=None):
     ap.add_argument("--latency", default="5ms", help="sink latency request (default 5ms)")
     ap.add_argument("--device", help="audio target sink")
     ap.add_argument("-v", "--verbose", action="store_true")
+    ap.add_argument("--preview", action="store_true", help="play a short sample without reading keyboard input")
+    ap.add_argument("--list-tunes", action="store_true", help="list the curated music21-built tune library")
+    ap.add_argument("--install-tune", metavar="ID", help="download a verified curated tune")
     ap.add_argument("--list-packs", action="store_true")
     ap.add_argument("--list-devices", action="store_true")
     ap.add_argument("--init", action="store_true", help="write a default config file and exit")
@@ -186,6 +234,22 @@ def main(argv=None):
     ap.add_argument("--json", action="store_true", help="machine-readable output where supported")
     args = ap.parse_args(argv)
 
+    if args.volume is not None and not 0 <= args.volume <= 1:
+        ap.error("--volume must be between 0 and 1")
+    if args.list_tunes:
+        installed = packs.discover()
+        entries = [dict(e, installed=e['id'] in installed) for e in tunes.catalogue()]
+        print(json.dumps(entries, indent=2) if args.json else '\n'.join(e['id'] + '  ' + e['name'] for e in entries))
+        return 0
+    if args.install_tune:
+        try:
+            print(f"Installed {tunes.install(args.install_tune)}")
+            return 0
+        except Exception as exc:
+            log(f"tune download failed: {exc}")
+            return 1
+    if args.preview:
+        return cmd_preview(args)
     if args.list_packs:
         return cmd_list_packs(args)
     if args.list_devices:

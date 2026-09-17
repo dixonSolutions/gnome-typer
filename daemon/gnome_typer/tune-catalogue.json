@@ -1,0 +1,122 @@
+[
+  {
+    "id": "tune-ode-to-joy",
+    "name": "Ode to Joy",
+    "description": "A cheerful, familiar opening phrase.",
+    "author": "Ludwig van Beethoven (1824)",
+    "license": "CC0-1.0",
+    "kind": "tune",
+    "source": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/ode-to-joy.musicxml",
+    "url": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/ode-to-joy.json",
+    "sha256": "55301fdf47aa4adf58fd02c043db8ac271aaf57ce88b6f30d90895d60d0f8925",
+    "bundled": true
+  },
+  {
+    "id": "tune-frere-jacques",
+    "name": "Frère Jacques",
+    "description": "A playful round to type along with.",
+    "author": "Traditional French round",
+    "license": "CC0-1.0",
+    "kind": "tune",
+    "source": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/frere-jacques.musicxml",
+    "url": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/frere-jacques.json",
+    "sha256": "9c48b42bcc8a074d72eb0ec09cb740efa844e7bee5c3312e0568a651cc350ea5",
+    "bundled": true
+  },
+  {
+    "id": "tune-pixel-parade",
+    "name": "Pixel Parade",
+    "description": "A bright little arcade-style loop.",
+    "author": "GNOME Typer · original",
+    "license": "CC0-1.0",
+    "kind": "tune",
+    "source": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/pixel-parade.musicxml",
+    "url": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/pixel-parade.json",
+    "sha256": "fffb6e518c9ab5735d2b5677657f074dd39f9b462162b21891e33f1419a52a66",
+    "bundled": true
+  },
+  {
+    "id": "tune-twinkle",
+    "name": "Twinkle, Twinkle",
+    "description": "A gentle and immediately recognisable melody.",
+    "author": "Traditional · Ah! vous dirai-je, maman (1761)",
+    "license": "CC0-1.0",
+    "kind": "tune",
+    "source": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/twinkle.musicxml",
+    "url": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/twinkle.json",
+    "sha256": "0b4c142780f17404a2532427014cb836959f0b31aaa964e9a09a1985c7d9e8ae",
+    "bundled": false
+  },
+  {
+    "id": "tune-jingle-bells",
+    "name": "Jingle Bells",
+    "description": "A little festive typing cheer.",
+    "author": "James Lord Pierpont (1857)",
+    "license": "CC0-1.0",
+    "kind": "tune",
+    "source": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/jingle-bells.musicxml",
+    "url": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/jingle-bells.json",
+    "sha256": "28225a56708e5ad18703e379e2b30cb251c2e36a4ce91e447de806e8e570db09",
+    "bundled": false
+  },
+  {
+    "id": "tune-london-bridge",
+    "name": "London Bridge",
+    "description": "A bouncy familiar phrase.",
+    "author": "Traditional English nursery song",
+    "license": "CC0-1.0",
+    "kind": "tune",
+    "source": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/london-bridge.musicxml",
+    "url": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/london-bridge.json",
+    "sha256": "8755493dd82b150834cf96889f2665da0b627d037f90c660e0c38e768b1a7975",
+    "bundled": false
+  },
+  {
+    "id": "tune-row-your-boat",
+    "name": "Row Your Boat",
+    "description": "A soft, lilting melody.",
+    "author": "Traditional round · 19th century",
+    "license": "CC0-1.0",
+    "kind": "tune",
+    "source": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/row-your-boat.musicxml",
+    "url": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/row-your-boat.json",
+    "sha256": "8b70d61193fe546f17976eac07c02211557fd1121021a0fddfc44fd7dcddf1d4",
+    "bundled": false
+  },
+  {
+    "id": "tune-saints",
+    "name": "When the Saints",
+    "description": "A sunny marching phrase.",
+    "author": "Traditional spiritual",
+    "license": "CC0-1.0",
+    "kind": "tune",
+    "source": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/saints.musicxml",
+    "url": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/saints.json",
+    "sha256": "a72bb6b75204575f5bc214ae31b1471b1549893c580a80d388d3e48233b4fdcc",
+    "bundled": false
+  },
+  {
+    "id": "tune-gentle-orbit",
+    "name": "Gentle Orbit",
+    "description": "A calm pentatonic loop for a quieter desk.",
+    "author": "GNOME Typer · original",
+    "license": "CC0-1.0",
+    "kind": "tune",
+    "source": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/gentle-orbit.musicxml",
+    "url": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/gentle-orbit.json",
+    "sha256": "d133c5d10147fcdf2aec35769c186b6fa4f9735ec9a2a8f019a754cec4c7cdeb",
+    "bundled": false
+  },
+  {
+    "id": "tune-victory-lap",
+    "name": "Victory Lap",
+    "description": "A tiny celebratory fanfare.",
+    "author": "GNOME Typer · original",
+    "license": "CC0-1.0",
+    "kind": "tune",
+    "source": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/victory-lap.musicxml",
+    "url": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/victory-lap.json",
+    "sha256": "ad2680f9dfe95856879242b60c63ab0b75cb9b520bd9c84a3822823937c161d6",
+    "bundled": false
+  }
+]

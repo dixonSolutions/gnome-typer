@@ -16,6 +16,10 @@ import GLib from 'gi://GLib';
 
 export const SERVICE = 'gnome-typer.service';
 
+// Keep ownership across extension disable/enable cycles in this Shell process.
+// A nested Shell must never stop a daemon owned by the user's live session.
+let fallbackProcess = null;
+
 export function configPath() {
     return GLib.build_filenamev([GLib.get_user_config_dir(), 'gnome-typer', 'config.json']);
 }
@@ -88,6 +92,7 @@ export function settingsToConfig(settings) {
     return {
         enabled: settings.get_boolean('enabled'),
         pack: settings.get_string('pack'),
+        tune_mode: settings.get_string('tune-mode'),
         volume: settings.get_double('volume'),
         key_up_sounds: settings.get_boolean('key-up-sounds'),
         repeat_sounds: settings.get_boolean('repeat-sounds'),
@@ -110,15 +115,27 @@ export function settingsToConfig(settings) {
  * write never bumps the mtime the daemon is watching.
  */
 export function writeConfig(settings) {
-    const text = `${JSON.stringify(settingsToConfig(settings), null, 2)}\n`;
     const file = Gio.File.new_for_path(configPath());
+    let previous = {};
+    let currentText = '';
     try {
         const [ok, current] = file.load_contents(null);
-        if (ok && new TextDecoder().decode(current) === text)
-            return false;
+        if (ok) {
+            currentText = new TextDecoder().decode(current);
+            const parsed = parseJson(currentText, {});
+            if (typeof parsed === 'object' && !Array.isArray(parsed))
+                previous = parsed;
+        }
     } catch {
-        // No config yet, or unreadable - fall through and write one.
+        // A first install has no config yet.
     }
+    const owned = settingsToConfig(settings);
+    // Preserve daemon-only settings such as device filters and release_ratio.
+    const merged = {...previous, ...owned,
+        velocity: {...previous.velocity, ...owned.velocity}};
+    const text = `${JSON.stringify(merged, null, 2)}\n`;
+    if (currentText === text)
+        return false;
     try {
         const dir = file.get_parent();
         if (!dir.query_exists(null))
@@ -154,8 +171,20 @@ export class Daemon {
         if (!this._path)
             return {ok: false, stdout: '', stderr: 'daemon binary not found'};
         try {
-            Gio.Subprocess.new([this._path],
-                Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
+            if (!fallbackProcess) {
+                const proc = Gio.Subprocess.new([this._path],
+                    Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
+                fallbackProcess = proc;
+                proc.wait_async(null, (child, result) => {
+                    try {
+                        child.wait_finish(result);
+                    } catch (error) {
+                        logError(error, 'gnome-typer: waiting for daemon');
+                    }
+                    if (fallbackProcess === child)
+                        fallbackProcess = null;
+                });
+            }
             return {ok: true, stdout: '', stderr: ''};
         } catch (e) {
             return {ok: false, stdout: '', stderr: String(e)};
@@ -165,8 +194,24 @@ export class Daemon {
     async stop() {
         if (GLib.file_test(unitPath(), GLib.FileTest.EXISTS))
             return runAsync(['systemctl', '--user', 'stop', SERVICE]);
-        // Anchored so this only matches the daemon, not a shell editing it.
-        return runAsync(['pkill', '-f', '^(\\S*python\\S*\\s+)?\\S*gnome-typer$']);
+        // Only signal the exact child this Shell started. Matching process
+        // names here also kills daemons in other (including live) sessions.
+        const proc = fallbackProcess;
+        if (!proc)
+            return {ok: true, stdout: '', stderr: ''};
+        proc.send_signal(15); // SIGTERM lets the daemon close its audio stream.
+        return new Promise(resolve => {
+            proc.wait_async(null, (child, result) => {
+                try {
+                    child.wait_finish(result);
+                    if (fallbackProcess === child)
+                        fallbackProcess = null;
+                    resolve({ok: true, stdout: '', stderr: ''});
+                } catch (error) {
+                    resolve({ok: false, stdout: '', stderr: String(error)});
+                }
+            });
+        });
     }
 
     async _json(argv) {
