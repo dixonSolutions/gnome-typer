@@ -1,7 +1,7 @@
 {
   "format": 1,
   "updated": "2026-09-17",
-  "note": "Built-in packs are installed by install.sh; this catalogue is for updates and community packs.",
+  "note": "Built-in packs are installed by install.sh; this catalogue is for updates and community packs. The 'latest' URLs are re-published by the release pipeline on every commit to main.",
   "packs": [
     {
       "id": "click",
@@ -9,7 +9,7 @@
       "description": "Sharp, bright clicky switches. Lots of top end.",
       "author": "gnome-typer (synthesized)",
       "license": "CC0-1.0",
-      "url": "https://github.com/dixonSolutions/gnome-typer/releases/download/packs-v1/click.zip"
+      "url": "https://github.com/dixonSolutions/gnome-typer/releases/latest/download/click.zip"
     },
     {
       "id": "crunch",
@@ -17,7 +17,7 @@
       "description": "Gritty, crunchy tactile switches with a granular bite.",
       "author": "gnome-typer (synthesized)",
       "license": "CC0-1.0",
-      "url": "https://github.com/dixonSolutions/gnome-typer/releases/download/packs-v1/crunch.zip"
+      "url": "https://github.com/dixonSolutions/gnome-typer/releases/latest/download/crunch.zip"
     },
     {
       "id": "thock",
@@ -25,7 +25,7 @@
       "description": "Deep, muted linear switches. Low and round.",
       "author": "gnome-typer (synthesized)",
       "license": "CC0-1.0",
-      "url": "https://github.com/dixonSolutions/gnome-typer/releases/download/packs-v1/thock.zip"
+      "url": "https://github.com/dixonSolutions/gnome-typer/releases/latest/download/thock.zip"
     },
     {
       "id": "typewriter",
@@ -33,7 +33,7 @@
       "description": "Mechanical typebar clack with a carriage bell on Return.",
       "author": "gnome-typer (synthesized)",
       "license": "CC0-1.0",
-      "url": "https://github.com/dixonSolutions/gnome-typer/releases/download/packs-v1/typewriter.zip"
+      "url": "https://github.com/dixonSolutions/gnome-typer/releases/latest/download/typewriter.zip"
     }
   ]
 }

@@ -55,6 +55,57 @@ All of it is tunable, and `Dynamics → Range → 0` turns it off.
 
 ## Install
 
+### From a release — no clone, no sudo
+
+One command. It downloads the latest release, checks it against the published
+`SHA256SUMS`, and installs the daemon, packs, systemd unit and extension under
+`$HOME`:
+
+```bash
+curl -fsSL https://github.com/dixonSolutions/gnome-typer/releases/latest/download/install-remote.sh | bash
+```
+
+Have it start everything too, instead of printing the two commands to run:
+
+```bash
+curl -fsSL https://github.com/dixonSolutions/gnome-typer/releases/latest/download/install-remote.sh | bash -s -- --enable
+```
+
+Piping a script into a shell is a thing to do with your eyes open, so reading
+it first is entirely reasonable — it is short:
+
+```bash
+curl -fsSL -O https://github.com/dixonSolutions/gnome-typer/releases/latest/download/install-remote.sh
+less install-remote.sh
+bash install-remote.sh            # --enable, or --version v0.1.0.7 to pin a build
+```
+
+### Just the extension blob
+
+The shell extension is published as an ordinary extension zip, with its
+GSettings schemas already compiled, so `gnome-extensions install` takes it
+directly:
+
+```bash
+url=https://github.com/dixonSolutions/gnome-typer/releases/latest/download
+curl -fL -o /tmp/gnome-typer.zip "$url/gnome-typer@dixonsolutions.github.io.shell-extension.zip"
+gnome-extensions install --force /tmp/gnome-typer.zip
+gnome-extensions enable gnome-typer@dixonsolutions.github.io
+```
+
+The extension is only the UI: on its own its toggle has nothing to talk to. To
+add the daemon afterwards, run the installer above — it is happy to install
+over an existing copy.
+
+Verify any of the downloads against the release checksums:
+
+```bash
+curl -fsSL -O "$url/SHA256SUMS"
+sha256sum -c SHA256SUMS --ignore-missing
+```
+
+### From a clone
+
 ```bash
 git clone https://github.com/dixonSolutions/gnome-typer
 cd gnome-typer
@@ -64,6 +115,8 @@ systemctl --user enable --now gnome-typer.service
 gnome-extensions enable gnome-typer@dixonsolutions.github.io
 ```
 
+### Either way
+
 You must be in the `input` group to read key events:
 
 ```bash
@@ -72,6 +125,13 @@ sudo usermod -aG input "$USER"    # then log out and back in
 
 On Wayland a new extension needs a session restart (log out and back in);
 the daemon itself works immediately.
+
+Uninstalling is `./uninstall.sh` from a clone, or the same script from the
+release if you never cloned:
+
+```bash
+curl -fsSL "$url/uninstall.sh" | bash          # add -s -- --purge to drop packs and config too
+```
 
 ## Built-in packs
 
@@ -155,6 +215,29 @@ dependency beyond the standard library is numpy.
 ```bash
 python3 -m unittest discover -s tests -v
 ```
+
+`tools/test-extension-enable.sh` goes further: it starts a real headless
+gnome-shell on a private session bus and fails unless the extension reaches
+ENABLED and its preferences window loads. That needs an installed copy, so run
+`./install.sh` first.
+
+## Releases
+
+Every commit on `main` runs [`.github/workflows/release.yml`](.github/workflows/release.yml):
+tests, then `tools/build-release.sh`, then a GitHub release tagged
+`v<daemon version>.<build number>` — so `releases/latest/download/…` always
+serves the current code, and the URLs in this README never need editing.
+
+Build the exact same artifacts locally to compare against a release:
+
+```bash
+tools/build-release.sh dist    # extension zip, pack zips, tarball, SHA256SUMS
+```
+
+The build stamps the release version into `metadata.json` (`version`,
+`version-name`) and into the daemon, so `gnome-typer --version` tells you which
+build is installed. `[skip release]` in a commit message tests and builds `main`
+without publishing.
 
 ## Troubleshooting
 

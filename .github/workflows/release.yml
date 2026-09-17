@@ -1,0 +1,195 @@
+# Every commit on main is tested, built and published as a release, so the
+# install instructions in the README always point at the current code.
+#
+# Pull requests run the same test and build jobs but publish nothing.
+name: release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Releases are numbered by run, so two main pushes must not race for a tag.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --quiet --upgrade pip numpy
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libglib2.0-bin
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Shell scripts parse
+        run: |
+          for f in install.sh uninstall.sh install-remote.sh tools/*.sh; do
+              bash -n "$f"
+          done
+
+      - name: Extension JavaScript parses
+        run: |
+          # node --check parses without resolving imports, so gi:// and
+          # resource:/// modules are irrelevant here - this catches the syntax
+          # error that would otherwise surface as a dead toggle after login.
+          for js in extension/*.js; do
+              cp "$js" "${RUNNER_TEMP}/$(basename "$js" .js).mjs"
+              node --check "${RUNNER_TEMP}/$(basename "$js" .js).mjs"
+          done
+
+      - name: JSON and GSettings schema are valid
+        run: |
+          for j in extension/metadata.json packs/index.json packs/*/pack.json; do
+              python -m json.tool "$j" > /dev/null
+          done
+          glib-compile-schemas --strict --dry-run extension/schemas/
+
+      - name: Pack catalogue matches the packs in the tree
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          index = json.loads(pathlib.Path("packs/index.json").read_text())
+          listed = {e["id"] for e in index["packs"]}
+          present = {p.parent.name for p in pathlib.Path("packs").glob("*/pack.json")}
+          missing = listed - present
+          assert not missing, f"catalogue lists packs that do not exist: {missing}"
+          for entry in index["packs"]:
+              url = entry["url"]
+              # The pipeline publishes <id>.zip on every release; a catalogue
+              # pointing anywhere else is a 404 waiting for a user.
+              assert "/releases/" in url and url.endswith(f"/{entry['id']}.zip"), url
+          print(f"catalogue ok: {sorted(listed)}")
+          PY
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libglib2.0-bin
+
+      - name: Build release artifacts
+        run: tools/build-release.sh dist
+
+      - name: The extension zip is what `gnome-extensions install` expects
+        run: |
+          python - <<'PY'
+          import json, zipfile
+          uuid = "gnome-typer@dixonsolutions.github.io"
+          with zipfile.ZipFile(f"dist/{uuid}.shell-extension.zip") as z:
+              names = set(z.namelist())
+              # gnome-extensions install unzips straight into the extension
+              # directory and reads metadata.json from the top level.
+              assert "metadata.json" in names, names
+              assert "schemas/gschemas.compiled" in names, names
+              assert "extension.js" in names and "prefs.js" in names, names
+              assert "daemon.js" in names, "helper module missing from the zip"
+              meta = json.loads(z.read("metadata.json"))
+          assert meta["uuid"] == uuid, meta["uuid"]
+          assert isinstance(meta["version"], int) and meta["version"] > 0, meta
+          print("extension zip ok:", meta["uuid"], meta["version"], meta.get("version-name"))
+          PY
+
+      - name: The tarball installs the same version it claims
+        run: |
+          tar -xzf dist/gnome-typer.tar.gz -C "${RUNNER_TEMP}"
+          tree="${RUNNER_TEMP}/gnome-typer-$(cat dist/VERSION)"
+          test -x "$tree/install.sh"
+          grep -q "^VERSION = \"$(cat dist/VERSION)\"$" "$tree/daemon/gnome_typer/cli.py"
+          # A pack in the catalogue must also be a pack we ship as a zip.
+          python - "$tree" <<'PY'
+          import json, pathlib, sys
+          index = json.loads((pathlib.Path(sys.argv[1]) / "packs/index.json").read_text())
+          for entry in index["packs"]:
+              assert pathlib.Path(f"dist/{entry['id']}.zip").is_file(), entry["id"]
+          print("catalogue assets ok")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gnome-typer-dist
+          path: dist
+          retention-days: 14
+
+  release:
+    needs: build
+    # Pull requests get the artifacts, not a release; [skip release] in a
+    # commit message builds and tests main without publishing.
+    if: >-
+      github.event_name != 'pull_request' &&
+      !contains(github.event.head_commit.message, '[skip release]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: gnome-typer-dist
+          path: dist
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="$(cat dist/VERSION)"
+          TAG="v${VERSION}"
+          ASSETS=(dist/*.zip dist/gnome-typer.tar.gz dist/install-remote.sh dist/uninstall.sh dist/SHA256SUMS)
+
+          {
+              echo "Built from \`${GITHUB_SHA}\` by run [#${GITHUB_RUN_NUMBER}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})."
+              echo
+              echo '## Install'
+              echo
+              echo '```bash'
+              echo "curl -fsSL ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/latest/download/install-remote.sh | bash"
+              echo '```'
+              echo
+              echo 'Or the extension on its own (it still needs the daemon to make any sound):'
+              echo
+              echo '```bash'
+              echo "curl -fL -o /tmp/gnome-typer.zip ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/latest/download/gnome-typer@dixonsolutions.github.io.shell-extension.zip"
+              echo 'gnome-extensions install --force /tmp/gnome-typer.zip'
+              echo '```'
+              echo
+              echo '## Checksums'
+              echo
+              echo '```'
+              cat dist/SHA256SUMS
+              echo '```'
+          } > "${RUNNER_TEMP}/notes.md"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+              # A re-run of the same build should refresh the release, not die.
+              gh release upload "$TAG" "${ASSETS[@]}" --clobber
+              gh release edit "$TAG" --notes-file "${RUNNER_TEMP}/notes.md" --latest
+          else
+              gh release create "$TAG" "${ASSETS[@]}" \
+                  --target "$GITHUB_SHA" \
+                  --title "gnome-typer ${VERSION}" \
+                  --notes-file "${RUNNER_TEMP}/notes.md" \
+                  --latest
+          fi
+          echo "released ${TAG}: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}" >> "$GITHUB_STEP_SUMMARY"
