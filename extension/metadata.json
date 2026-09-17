@@ -1,0 +1,10 @@
+{
+  "uuid": "gnome-typer@dixonsolutions.github.io",
+  "name": "GNOME Typer",
+  "description": "Mechanical keyboard, typewriter and crunch sounds for every key. Works on Wayland by reading input devices directly, with velocity-sensitive loudness, per-key and key-combination sounds, and downloadable sound packs.",
+  "shell-version": ["48", "49", "50"],
+  "url": "https://github.com/dixonSolutions/gnome-typer",
+  "settings-schema": "org.gnome.shell.extensions.gnome-typer",
+  "gettext-domain": "gnome-typer",
+  "version": 1
+}

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.gnome-typer"
+          path="/org/gnome/shell/extensions/gnome-typer/">
+
+    <key name="enabled" type="b">
+      <default>true</default>
+      <summary>Play keyboard sounds</summary>
+    </key>
+
+    <key name="pack" type="s">
+      <default>'crunch'</default>
+      <summary>Active sound pack id</summary>
+    </key>
+
+    <key name="volume" type="d">
+      <range min="0.0" max="1.0"/>
+      <default>0.9</default>
+      <summary>Output volume</summary>
+    </key>
+
+    <key name="key-up-sounds" type="b">
+      <default>true</default>
+      <summary>Play a sound when a key is released</summary>
+    </key>
+
+    <key name="repeat-sounds" type="b">
+      <default>false</default>
+      <summary>Play a sound for held-key autorepeat</summary>
+    </key>
+
+    <key name="stereo" type="d">
+      <range min="0.0" max="1.0"/>
+      <default>0.35</default>
+      <summary>Pan keys across the stereo field by physical position</summary>
+    </key>
+
+    <key name="velocity-enabled" type="b">
+      <default>true</default>
+      <summary>Vary loudness with typing dynamics</summary>
+    </key>
+
+    <key name="velocity-amount" type="d">
+      <range min="0.0" max="1.0"/>
+      <default>0.55</default>
+      <summary>How much loudness may swing</summary>
+    </key>
+
+    <key name="velocity-fast-ms" type="i">
+      <range min="10" max="400"/>
+      <default>55</default>
+      <summary>Gap between keys treated as the hardest strike</summary>
+    </key>
+
+    <key name="velocity-slow-ms" type="i">
+      <range min="80" max="2000"/>
+      <default>420</default>
+      <summary>Gap between keys treated as the softest strike</summary>
+    </key>
+
+    <key name="humanize" type="d">
+      <range min="0.0" max="0.5"/>
+      <default>0.12</default>
+      <summary>Random per-hit loudness variation</summary>
+    </key>
+
+    <key name="key-sounds" type="s">
+      <default>'{}'</default>
+      <summary>JSON map of key name to sound category</summary>
+    </key>
+
+    <key name="combos" type="s">
+      <default>'[]'</default>
+      <summary>JSON list of key-combination sounds</summary>
+    </key>
+
+    <key name="pack-index-url" type="s">
+      <default>'https://raw.githubusercontent.com/dixonSolutions/gnome-typer/main/packs/index.json'</default>
+      <summary>Where to look for downloadable sound packs</summary>
+    </key>
+
+    <key name="show-indicator" type="b">
+      <default>true</default>
+      <summary>Show the panel indicator</summary>
+    </key>
+  </schema>
+</schemalist>

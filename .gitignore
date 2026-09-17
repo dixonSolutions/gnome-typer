@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+*.npy
+extension/schemas/gschemas.compiled
+.cache/
+build/
+dist/

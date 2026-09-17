@@ -1,0 +1,41 @@
+{
+  "id": "crunch",
+  "name": "Crunch",
+  "description": "Gritty, crunchy tactile switches with a granular bite.",
+  "author": "gnome-typer (synthesized)",
+  "license": "CC0-1.0",
+  "format": 1,
+  "sounds": {
+    "down": [
+      "down1.wav",
+      "down2.wav",
+      "down3.wav",
+      "down4.wav",
+      "down5.wav",
+      "down6.wav"
+    ],
+    "up": [
+      "up1.wav",
+      "up2.wav",
+      "up3.wav",
+      "up4.wav",
+      "up5.wav",
+      "up6.wav"
+    ],
+    "space": [
+      "space1.wav",
+      "space2.wav",
+      "space3.wav"
+    ],
+    "enter": [
+      "enter1.wav",
+      "enter2.wav",
+      "enter3.wav"
+    ]
+  },
+  "key_map": {
+    "KEY_SPACE": "space",
+    "KEY_ENTER": "enter",
+    "KEY_KPENTER": "enter"
+  }
+}
