@@ -164,6 +164,40 @@ class TestEngine(unittest.TestCase):
         self.assertLess(left, 0)
         self.assertGreater(right, 0)
 
+    def test_disabled_makes_no_sound(self):
+        eng, mixer = self._engine(enabled=False)
+        for code in (30, 29, 57, 28):
+            eng.on_key(code, engine.VALUE_DOWN, 0.0)
+            eng.on_key(code, engine.VALUE_UP, 0.05)
+        self.assertEqual(mixer.calls, [])
+
+    def test_mute_still_tracks_held_keys(self):
+        """Muting must not desync modifier state, or combos break on re-enable."""
+        eng, mixer = self._engine(
+            enabled=False,
+            combos=[{"keys": ["KEY_LEFTCTRL", "KEY_S"], "sound": "bell"}])
+        eng.on_key(29, engine.VALUE_DOWN, 0.0)          # ctrl down while muted
+        self.assertEqual(mixer.calls, [])
+        self.assertIn(29, eng.held)                     # still tracked
+
+        cfg = config.merge(config.DEFAULTS, {
+            "enabled": True,
+            "combos": [{"keys": ["KEY_LEFTCTRL", "KEY_S"], "sound": "bell"}]})
+        eng.reconfigure(cfg)
+        eng.on_key(31, engine.VALUE_DOWN, 0.05)         # s -> combo must still fire
+        self.assertIs(mixer.calls[-1]["samples"], eng.pack.sounds["bell"][0])
+
+    def test_reconfigure_toggles_enabled_live(self):
+        eng, mixer = self._engine(enabled=True)
+        eng.on_key(30, engine.VALUE_DOWN, 0.0)
+        self.assertEqual(len(mixer.calls), 1)
+        eng.reconfigure(config.merge(config.DEFAULTS, {"enabled": False}))
+        eng.on_key(30, engine.VALUE_DOWN, 0.1)
+        self.assertEqual(len(mixer.calls), 1)           # unchanged
+        eng.reconfigure(config.merge(config.DEFAULTS, {"enabled": True}))
+        eng.on_key(30, engine.VALUE_DOWN, 0.2)
+        self.assertEqual(len(mixer.calls), 2)
+
     def test_volume_scales_output(self):
         eng, mixer = self._engine(volume=0.5, velocity={"enabled": False})
         eng.on_key(30, engine.VALUE_DOWN, 0.0)
