@@ -35,7 +35,12 @@ done
 # --------------------------------------------------------------- extension
 say "extension   -> ${EXT}"
 mkdir -p "${EXT}"
-cp "${SRC}/extension/metadata.json" "${SRC}/extension/extension.js" "${SRC}/extension/prefs.js" "${EXT}/"
+cp "${SRC}/extension/metadata.json" "${EXT}/"
+# Copy every module, not a hand-maintained list: the extension imports helper
+# modules (daemon.js) that are easy to forget here and fail only at load time.
+for js in "${SRC}"/extension/*.js; do
+    [ -e "${js}" ] && cp "${js}" "${EXT}/"
+done
 [ -f "${SRC}/extension/stylesheet.css" ] && cp "${SRC}/extension/stylesheet.css" "${EXT}/"
 mkdir -p "${EXT}/schemas"
 cp "${SRC}/extension/schemas/"*.gschema.xml "${EXT}/schemas/"
