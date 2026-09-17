@@ -130,7 +130,8 @@ Uninstalling is `./uninstall.sh` from a clone, or the same script from the
 release if you never cloned:
 
 ```bash
-curl -fsSL "$url/uninstall.sh" | bash          # add -s -- --purge to drop packs and config too
+curl -fsSL https://github.com/dixonSolutions/gnome-typer/releases/latest/download/uninstall.sh | bash
+# add: | bash -s -- --purge   to drop downloaded packs, config and cache too
 ```
 
 ## Built-in packs

@@ -88,8 +88,39 @@ echo
 
 if [ "$ENABLE" -eq 1 ]; then
     echo
-    systemctl --user enable --now gnome-typer.service
-    gnome-extensions enable "$UUID" 2>/dev/null \
-        || echo "  (the extension enables after the next login on Wayland)"
-    systemctl --user --no-pager --lines=5 status gnome-typer.service || true
+    systemctl --user enable --now gnome-typer.service || true
+    # The unit is Type=simple, so systemctl reports success the moment it has
+    # forked - a daemon that exits because it can read no keyboard still looks
+    # like a clean start. Ask the unit, a moment later, instead.
+    sleep 3
+    if [ "$(systemctl --user is-active gnome-typer.service)" = "active" ]; then
+        echo "  daemon running."
+    else
+        echo "  the daemon is not running. The usual cause is the input group:"
+        echo "    sudo usermod -aG input \"$USER\"   # then log out and back in"
+        echo
+        journalctl --user -u gnome-typer.service -n 5 --no-pager 2>/dev/null | sed 's/^/    /'
+    fi
+
+    # `gnome-extensions enable` asks the running shell, and a shell that has
+    # not rescanned its extensions directory answers "doesn't exist" - which on
+    # Wayland is every freshly installed extension. Setting the key directly
+    # means it is simply on after the next login.
+    if ! gnome-extensions enable "$UUID" 2>/dev/null; then
+        if command -v gsettings >/dev/null 2>&1; then
+            python3 - "$UUID" <<'ENABLE_PY'
+import ast, subprocess, sys
+uuid = sys.argv[1]
+key = ["gsettings", "get", "org.gnome.shell", "enabled-extensions"]
+current = subprocess.run(key, capture_output=True, text=True).stdout.strip()
+items = ast.literal_eval(current.replace("@as ", "")) if current else []
+if uuid in items:
+    sys.exit(0)
+items.append(uuid)
+value = "[" + ", ".join(f"'{i}'" for i in items) + "]"
+subprocess.run(["gsettings", "set", "org.gnome.shell", "enabled-extensions", value], check=True)
+ENABLE_PY
+        fi
+        echo "  the extension is enabled; it appears after the next login (Wayland)."
+    fi
 fi
