@@ -1,0 +1,123 @@
+{
+  "format": 1,
+  "id": "tune-row-your-boat",
+  "name": "Row Your Boat",
+  "kind": "tune",
+  "description": "A soft, lilting melody.",
+  "author": "Traditional round · 19th century",
+  "license": "CC0-1.0",
+  "encoding_note": "New monophonic encoding and synthesis; no third-party recording or modern arrangement.",
+  "source": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/row-your-boat.musicxml",
+  "built_with": "music21",
+  "tempo": 100,
+  "melody": [
+    {
+      "midi": 60,
+      "beats": 1.5
+    },
+    {
+      "midi": 60,
+      "beats": 1.5
+    },
+    {
+      "midi": 60,
+      "beats": 1.0
+    },
+    {
+      "midi": 62,
+      "beats": 0.5
+    },
+    {
+      "midi": 64,
+      "beats": 1.5
+    },
+    {
+      "midi": 64,
+      "beats": 1.0
+    },
+    {
+      "midi": 62,
+      "beats": 0.5
+    },
+    {
+      "midi": 64,
+      "beats": 1.0
+    },
+    {
+      "midi": 65,
+      "beats": 0.5
+    },
+    {
+      "midi": 67,
+      "beats": 3.0
+    },
+    {
+      "midi": 72,
+      "beats": 0.5
+    },
+    {
+      "midi": 72,
+      "beats": 0.5
+    },
+    {
+      "midi": 72,
+      "beats": 0.5
+    },
+    {
+      "midi": 67,
+      "beats": 0.5
+    },
+    {
+      "midi": 67,
+      "beats": 0.5
+    },
+    {
+      "midi": 67,
+      "beats": 0.5
+    },
+    {
+      "midi": 64,
+      "beats": 0.5
+    },
+    {
+      "midi": 64,
+      "beats": 0.5
+    },
+    {
+      "midi": 64,
+      "beats": 0.5
+    },
+    {
+      "midi": 60,
+      "beats": 0.5
+    },
+    {
+      "midi": 60,
+      "beats": 0.5
+    },
+    {
+      "midi": 60,
+      "beats": 0.5
+    },
+    {
+      "midi": 67,
+      "beats": 1.0
+    },
+    {
+      "midi": 65,
+      "beats": 0.5
+    },
+    {
+      "midi": 64,
+      "beats": 1.0
+    },
+    {
+      "midi": 62,
+      "beats": 0.5
+    },
+    {
+      "midi": 60,
+      "beats": 3.0
+    }
+  ]
+}

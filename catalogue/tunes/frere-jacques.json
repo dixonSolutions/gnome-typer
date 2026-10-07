@@ -1,0 +1,143 @@
+{
+  "format": 1,
+  "id": "tune-frere-jacques",
+  "name": "Frère Jacques",
+  "kind": "tune",
+  "description": "A playful round to type along with.",
+  "author": "Traditional French round",
+  "license": "CC0-1.0",
+  "encoding_note": "New monophonic encoding and synthesis; no third-party recording or modern arrangement.",
+  "source": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/frere-jacques.musicxml",
+  "built_with": "music21",
+  "tempo": 112,
+  "melody": [
+    {
+      "midi": 60,
+      "beats": 1.0
+    },
+    {
+      "midi": 62,
+      "beats": 1.0
+    },
+    {
+      "midi": 64,
+      "beats": 1.0
+    },
+    {
+      "midi": 60,
+      "beats": 1.0
+    },
+    {
+      "midi": 60,
+      "beats": 1.0
+    },
+    {
+      "midi": 62,
+      "beats": 1.0
+    },
+    {
+      "midi": 64,
+      "beats": 1.0
+    },
+    {
+      "midi": 60,
+      "beats": 1.0
+    },
+    {
+      "midi": 64,
+      "beats": 1.0
+    },
+    {
+      "midi": 65,
+      "beats": 1.0
+    },
+    {
+      "midi": 67,
+      "beats": 2.0
+    },
+    {
+      "midi": 64,
+      "beats": 1.0
+    },
+    {
+      "midi": 65,
+      "beats": 1.0
+    },
+    {
+      "midi": 67,
+      "beats": 2.0
+    },
+    {
+      "midi": 67,
+      "beats": 0.5
+    },
+    {
+      "midi": 69,
+      "beats": 0.5
+    },
+    {
+      "midi": 67,
+      "beats": 0.5
+    },
+    {
+      "midi": 65,
+      "beats": 0.5
+    },
+    {
+      "midi": 64,
+      "beats": 1.0
+    },
+    {
+      "midi": 60,
+      "beats": 1.0
+    },
+    {
+      "midi": 67,
+      "beats": 0.5
+    },
+    {
+      "midi": 69,
+      "beats": 0.5
+    },
+    {
+      "midi": 67,
+      "beats": 0.5
+    },
+    {
+      "midi": 65,
+      "beats": 0.5
+    },
+    {
+      "midi": 64,
+      "beats": 1.0
+    },
+    {
+      "midi": 60,
+      "beats": 1.0
+    },
+    {
+      "midi": 60,
+      "beats": 1.0
+    },
+    {
+      "midi": 55,
+      "beats": 1.0
+    },
+    {
+      "midi": 60,
+      "beats": 2.0
+    },
+    {
+      "midi": 60,
+      "beats": 1.0
+    },
+    {
+      "midi": 55,
+      "beats": 1.0
+    },
+    {
+      "midi": 60,
+      "beats": 2.0
+    }
+  ]
+}

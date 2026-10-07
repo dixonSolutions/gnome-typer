@@ -13,6 +13,12 @@
       <summary>Active sound pack id</summary>
     </key>
 
+    <key name="tune-mode" type="s">
+      <choices><choice value="keystroke"/><choice value="flow"/></choices>
+      <default>'keystroke'</default>
+      <summary>Advance tunes per key or play at their tempo while typing</summary>
+    </key>
+
     <key name="volume" type="d">
       <range min="0.0" max="1.0"/>
       <default>0.9</default>

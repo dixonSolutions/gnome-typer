@@ -1,0 +1,103 @@
+{
+  "format": 1,
+  "id": "tune-pixel-parade",
+  "name": "Pixel Parade",
+  "kind": "tune",
+  "description": "A bright little arcade-style loop.",
+  "author": "GNOME Typer · original",
+  "license": "CC0-1.0",
+  "encoding_note": "New monophonic encoding and synthesis; no third-party recording or modern arrangement.",
+  "source": "https://raw.githubusercontent.com/evaRATrad/gnome-typer/improve/typing-experience/catalogue/tunes/pixel-parade.musicxml",
+  "built_with": "music21",
+  "tempo": 132,
+  "melody": [
+    {
+      "midi": 60,
+      "beats": 0.5
+    },
+    {
+      "midi": 64,
+      "beats": 0.5
+    },
+    {
+      "midi": 67,
+      "beats": 0.5
+    },
+    {
+      "midi": 72,
+      "beats": 0.5
+    },
+    {
+      "midi": 67,
+      "beats": 0.5
+    },
+    {
+      "midi": 64,
+      "beats": 0.5
+    },
+    {
+      "midi": 62,
+      "beats": 0.5
+    },
+    {
+      "midi": 65,
+      "beats": 0.5
+    },
+    {
+      "midi": 69,
+      "beats": 0.5
+    },
+    {
+      "midi": 74,
+      "beats": 0.5
+    },
+    {
+      "midi": 69,
+      "beats": 0.5
+    },
+    {
+      "midi": 65,
+      "beats": 0.5
+    },
+    {
+      "midi": 64,
+      "beats": 0.5
+    },
+    {
+      "midi": 67,
+      "beats": 0.5
+    },
+    {
+      "midi": 71,
+      "beats": 0.5
+    },
+    {
+      "midi": 76,
+      "beats": 0.5
+    },
+    {
+      "midi": 74,
+      "beats": 0.5
+    },
+    {
+      "midi": 71,
+      "beats": 0.5
+    },
+    {
+      "midi": 67,
+      "beats": 0.5
+    },
+    {
+      "midi": 64,
+      "beats": 0.5
+    },
+    {
+      "midi": 60,
+      "beats": 1.0
+    },
+    {
+      "midi": null,
+      "beats": 1.0
+    }
+  ]
+}

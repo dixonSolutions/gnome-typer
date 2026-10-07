@@ -3,6 +3,7 @@ import os
 import random
 import struct
 import threading
+import time
 
 from . import keycodes
 
@@ -63,14 +64,27 @@ def keyboard_devices(include=None, exclude=None):
     for block in blocks:
         if "kbd" not in block:
             continue
-        name, node = "", None
+        name, node, key_bitmap = "", None, None
         for line in block.splitlines():
             if line.startswith("N: Name="):
                 name = line.split("=", 1)[1].strip('"')
+            elif line.startswith("B: KEY="):
+                # /proc prints native-word hex groups, highest word first.
+                # Test alphabet and Space capabilities to exclude power,
+                # privacy, video-bus and other hotkey-only input devices.
+                digits = struct.calcsize("L") * 2
+                words = line.split("=", 1)[1].split()
+                try:
+                    key_bitmap = int("".join(word.zfill(digits) for word in words), 16)
+                except ValueError:
+                    continue
             elif line.startswith("H: Handlers="):
                 for handler in line.split("=", 1)[1].split():
                     if handler.startswith("event"):
                         node = "/dev/input/" + handler
+        if key_bitmap is not None and not all(
+                key_bitmap & (1 << keycodes.resolve(key)) for key in ("KEY_A", "KEY_Z", "KEY_SPACE")):
+            continue
         if not node or not os.access(node, os.R_OK):
             continue
         if exclude and (node in exclude or any(x.lower() in name.lower() for x in exclude)):
@@ -126,8 +140,14 @@ class Engine:
         self.velocity = Velocity(cfg)
         self.held = set()
         self._cursors = {}
+        self._press_levels = {}
         self._lock = threading.Lock()
         self._compile()
+        self._tune_cursor = 0
+        self._last_typing = float('-inf')
+        self._next_note = 0
+        self._flow_stop = threading.Event()
+        self._flow_thread = None
 
     # -- configuration ----------------------------------------------------
     def _compile(self):
@@ -158,12 +178,44 @@ class Engine:
 
     def reconfigure(self, cfg, pack=None):
         with self._lock:
+            if pack is not None and pack is not self.pack or cfg.get('tune_mode') != self.cfg.get('tune_mode'):
+                self._tune_cursor = 0
+                self._last_typing = float('-inf')
+                self._next_note = 0
             self.cfg = cfg
             if pack is not None:
                 self.pack = pack
             self.velocity.update(cfg)
             self._compile()
             self.mixer.gain = 1.0        # per-voice gain carries the volume
+
+    def stop(self):
+        self._flow_stop.set()
+        if self._flow_thread:
+            self._flow_thread.join(timeout=1)
+
+    def _tune_note(self, skip_rests=False):
+        events = self.pack.tune_events
+        for _ in range(len(events)):
+            sample, duration = events[self._tune_cursor % len(events)]
+            self._tune_cursor = (self._tune_cursor + 1) % len(events)
+            if sample is not None:
+                self.mixer.play(sample, gain=self.volume, pan=0)
+            if sample is not None or not skip_rests:
+                return duration
+
+    def _flow_step(self, now):
+        # Called with the engine lock held. Timing is monotonic, independent of
+        # evdev timestamps and wall-clock changes. Never catch up in a burst.
+        if (self.enabled and hasattr(self.pack, 'tune_events') and
+                self.cfg.get('tune_mode') == 'flow' and now - self._last_typing < 1.2):
+            if now >= self._next_note:
+                self._next_note = now + self._tune_note()
+
+    def _flow_loop(self):
+        while not self._flow_stop.wait(.02):
+            with self._lock:
+                self._flow_step(time.monotonic())
 
     # -- sound selection --------------------------------------------------
     def _variant(self, category):
@@ -188,6 +240,15 @@ class Engine:
         return None
 
     def on_key(self, code, value, now):
+        # Device readers and the config watcher share this engine. Never let
+        # pack/volume changes split a press into two different configurations.
+        with self._lock:
+            self._on_key(code, value, now)
+
+    def _on_key(self, code, value, now):
+        if value not in (VALUE_DOWN, VALUE_UP, VALUE_REPEAT):
+            return
+        release_level = self._press_levels.pop(code, None) if value == VALUE_UP else None
         if value == VALUE_DOWN:
             self.held.add(code)
         elif value == VALUE_UP:
@@ -195,6 +256,20 @@ class Engine:
 
         # Muting still tracks held keys, so combos stay correct when re-enabled.
         if not self.enabled:
+            return
+        if hasattr(self.pack, 'tune_events'):
+            name = keycodes.CODE_TO_NAME.get(code, '')
+            if value != VALUE_DOWN or name not in PAN or any(
+                    part in name for part in ('SHIFT', 'CTRL', 'ALT', 'META', 'LOCK', 'ESC')):
+                return
+            if self.cfg.get('tune_mode') == 'flow':
+                self._last_typing = time.monotonic()
+                self._flow_step(self._last_typing)
+                if self._flow_thread is None:
+                    self._flow_thread = threading.Thread(target=self._flow_loop, daemon=True, name='tune-clock')
+                    self._flow_thread.start()
+            else:
+                self._tune_note(skip_rests=True)
             return
         if value == VALUE_REPEAT and not self.repeats:
             return
@@ -205,7 +280,12 @@ class Engine:
         pan = PAN.get(name, 0.0) * self.stereo
 
         if value in (VALUE_DOWN, VALUE_REPEAT):
-            level = self.velocity.strike(now)
+            # Holding Backspace is not faster typing. Reuse the original
+            # strike so autorepeat does not make the next real key louder.
+            level = (self._press_levels.get(code, 1.0) if value == VALUE_REPEAT
+                     else self.velocity.strike(now))
+            if value == VALUE_DOWN:
+                self._press_levels[code] = level
             hit = self._combo_category(code)
             if hit:
                 category, extra = hit
@@ -218,8 +298,8 @@ class Engine:
             self.mixer.play(self._variant(category), gain=self.volume * level * extra, pan=pan)
         else:
             category = "up" if self.pack.has("up") else None
-            if category:
-                level = self.velocity.release_ratio
+            if category and release_level is not None:
+                level = release_level * self.velocity.release_ratio
                 self.mixer.play(self._variant(category), gain=self.volume * level, pan=pan)
 
 
